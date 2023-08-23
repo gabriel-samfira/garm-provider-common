@@ -1,6 +1,6 @@
 # GARM provider common
 
-This package contains common code for GARM providers and for GARM itself.
+This package contains common code for [GARM](https://github.com/cloudbase/garm) providers and for GARM itself.
 
 ## Generating cloud userdata
 
