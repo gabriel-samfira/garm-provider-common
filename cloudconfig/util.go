@@ -47,6 +47,10 @@ type CloudConfigSpec struct {
 	PreInstallScripts map[string][]byte `json:"pre_install_scripts,omitempty" jsonschema:"title=pre-install scripts,description= map of pre-install scripts that will be run before the runner install script. These will run as root and can be used to prep a generic image before we attempt to install the runner. The key of the map is the name of the script as it will be written to disk. The value is a byte array with the contents of the script."`
 	// ExtraContext is a map of extra context that will be passed to the runner install template.
 	ExtraContext map[string]string `json:"extra_context,omitempty" jsonschema:"title=map of extra context,description=Extra context that will be passed to the runner_install_template."`
+	// RunnerUsername is the username passed on to the runner install template.
+	RunnerUsername string `json:"runner_username" jsonschema:"title=runner username,description=The username that will be used to run the github runner service."`
+	// RunnerGroup is the group name passed on to the runner install template.
+	RunnerGroup string `json:"runner_group" jsonschema:"title=runner user group,description=The group name which will own some resources."`
 }
 
 func sortMapKeys(m map[string][]byte) []string {
@@ -78,6 +82,24 @@ func GetSpecs(bootstrapParams params.BootstrapInstance) (CloudConfigSpec, error)
 		extraSpecs.PreInstallScripts = map[string][]byte{}
 	}
 
+	runnerGroup := bootstrapParams.UserDataOptions.RunnerGroup
+	runnerUser := bootstrapParams.UserDataOptions.RunnerUsername
+	if extraSpecs.RunnerGroup == "" {
+		if runnerGroup != "" {
+			extraSpecs.RunnerGroup = runnerGroup
+		} else {
+			extraSpecs.RunnerGroup = defaults.DefaultUser
+		}
+	}
+
+	if extraSpecs.RunnerUsername == "" {
+		if runnerUser != "" {
+			extraSpecs.RunnerUsername = runnerUser
+		} else {
+			extraSpecs.RunnerUsername = defaults.DefaultUser
+		}
+	}
+
 	return extraSpecs, nil
 }
 
@@ -104,8 +126,8 @@ func GetRunnerInstallScript(bootstrapParams params.BootstrapInstance, tools para
 		DownloadURL:       tools.GetDownloadURL(),
 		TempDownloadToken: tempToken,
 		MetadataURL:       bootstrapParams.MetadataURL,
-		RunnerUsername:    defaults.DefaultUser,
-		RunnerGroup:       defaults.DefaultUser,
+		RunnerUsername:    extraSpecs.RunnerUsername,
+		RunnerGroup:       extraSpecs.RunnerGroup,
 		RepoURL:           bootstrapParams.RepoURL,
 		RunnerName:        runnerName,
 		RunnerLabels:      strings.Join(bootstrapParams.Labels, ","),
@@ -117,7 +139,7 @@ func GetRunnerInstallScript(bootstrapParams params.BootstrapInstance, tools para
 		UseJITConfig:      bootstrapParams.JitConfigEnabled,
 	}
 
-	if bootstrapParams.CACertBundle != nil && len(bootstrapParams.CACertBundle) > 0 {
+	if len(bootstrapParams.CACertBundle) > 0 {
 		installRunnerParams.CABundle = string(bootstrapParams.CACertBundle)
 	}
 
@@ -139,6 +161,8 @@ func GetCloudInitConfig(bootstrapParams params.BootstrapInstance, installScript 
 	}
 
 	cloudCfg := NewDefaultCloudInitConfig()
+	cloudCfg.SystemInfo.DefaultUser.Name = extraSpecs.RunnerUsername
+	cloudCfg.SystemInfo.DefaultUser.Home = fmt.Sprintf("/home/%s", extraSpecs.RunnerUsername)
 
 	if bootstrapParams.UserDataOptions.DisableUpdatesOnBoot {
 		cloudCfg.PackageUpgrade = false
@@ -162,7 +186,7 @@ func GetCloudInitConfig(bootstrapParams params.BootstrapInstance, installScript 
 	cloudCfg.AddFile(installScript, "/install_runner.sh", "root:root", "755")
 	cloudCfg.AddRunCmd(fmt.Sprintf("su -l -c /install_runner.sh %s", defaults.DefaultUser))
 	cloudCfg.AddRunCmd("rm -f /install_runner.sh")
-	if bootstrapParams.CACertBundle != nil && len(bootstrapParams.CACertBundle) > 0 {
+	if len(bootstrapParams.CACertBundle) > 0 {
 		if err := cloudCfg.AddCACert(bootstrapParams.CACertBundle); err != nil {
 			return "", errors.Wrap(err, "adding CA cert bundle")
 		}

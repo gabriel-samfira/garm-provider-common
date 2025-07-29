@@ -178,7 +178,7 @@ sudo ./svc.sh install {{ .RunnerUsername }} || fail "failed to install service"
 {{- end}}
 
 if [ -e "/sys/fs/selinux" ];then
-	sudo chcon -R -h user_u:object_r:bin_t:s0 /home/runner/ || fail "failed to change selinux context"
+	sudo chcon -R -h user_u:object_r:bin_t:s0 /home/{{ .RunnerUsername }}/ || fail "failed to change selinux context"
 fi
 
 AGENT_ID=""
@@ -604,14 +604,14 @@ function Install-Runner() {
 		# Create user with administrator rights to run service as
 		$userPasswd = Get-RandomString -Length 10
 		$secPasswd = ConvertTo-SecureString "$userPasswd" -AsPlainText -Force
-		New-LocalUser -Name "runner" -Password $secPasswd -PasswordNeverExpires -UserMayNotChangePassword
-		$pscreds = New-Object System.Management.Automation.PSCredential (".\runner", $secPasswd)
+		New-LocalUser -Name "{{ .RunnerUsername }}" -Password $secPasswd -PasswordNeverExpires -UserMayNotChangePassword
+		$pscreds = New-Object System.Management.Automation.PSCredential (".\{{ .RunnerUsername }}", $secPasswd)
 		$adminGrpName = (Get-CimInstance win32_group -Filter 'SID = "S-1-5-32-544"').Name
 		if (!$adminGrpName) {
 			Throw "Could not find administrators group name"
 		}
-		Add-LocalGroupMember -Group $adminGrpName -Member runner
-		$ntAcct = New-Object System.Security.Principal.NTAccount("runner")
+		Add-LocalGroupMember -Group $adminGrpName -Member {{ .RunnerUsername }}
+		$ntAcct = New-Object System.Security.Principal.NTAccount("{{ .RunnerUsername }}")
 		$sid = $ntAcct.Translate([System.Security.Principal.SecurityIdentifier])
 		$sidBytes = New-Object byte[] ($sid.BinaryLength)
 		$sid.GetBinaryForm($sidBytes, 0)
@@ -658,7 +658,7 @@ function Install-Runner() {
 		# Ensure runner has full access to actions-runner folder
 		$runnerACL = Get-Acl $runnerDir
 		$runnerACL.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-		    "runner", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+		    "{{ .RunnerUsername }}", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
 		)))
 		Set-Acl -Path $runnerDir -AclObject $runnerAcl
 
@@ -681,7 +681,7 @@ function Install-Runner() {
 
 		Update-GarmStatus -CallbackURL $CallbackURL -Message "Creating system service"
 		$SVC_NAME=(gc -raw $serviceNameFile)
-		New-Service -Name "$SVC_NAME" -BinaryPathName "C:\actions-runner\bin\RunnerService.exe" -DisplayName "$SVC_NAME" -Description "GitHub Actions Runner ($SVC_NAME)" -StartupType Automatic -Credential $pscreds
+		New-Service -Name "$SVC_NAME" -BinaryPathName "$runnerDir\bin\RunnerService.exe" -DisplayName "$SVC_NAME" -Description "GitHub Actions Runner ($SVC_NAME)" -StartupType Automatic -Credential $pscreds
 		Start-Service "$SVC_NAME"
 		Set-SystemInfo -CallbackURL $CallbackURL -RunnerDir $runnerDir -BearerToken $Token
 		Update-GarmStatus -Message "runner successfully installed" -CallbackURL $CallbackURL -Status "idle" | Out-Null
@@ -693,7 +693,7 @@ function Install-Runner() {
 		{{- if .GitHubRunnerGroup }}
 		./config.cmd --unattended --url "{{ .RepoURL }}" --token $GithubRegistrationToken --runnergroup {{.GitHubRunnerGroup}} --name "{{ .RunnerName }}" --labels "{{ .RunnerLabels }}" --no-default-labels --ephemeral --runasservice --windowslogonaccount runner --windowslogonpassword "$userPasswd"
 		{{- else}}
-		./config.cmd --unattended --url "{{ .RepoURL }}" --token $GithubRegistrationToken --name "{{ .RunnerName }}" --labels "{{ .RunnerLabels }}" --no-default-labels --ephemeral --runasservice --windowslogonaccount runner --windowslogonpassword "$userPasswd"
+		./config.cmd --unattended --url "{{ .RepoURL }}" --token $GithubRegistrationToken --name "{{ .RunnerName }}" --labels "{{ .RunnerLabels }}" --no-default-labels --ephemeral --runasservice --windowslogonaccount {{ .RunnerUsername }} --windowslogonpassword "$userPasswd"
 		{{- end}}
 		if ($LASTEXITCODE) {
 			Throw "Failed to configure runner. Err code $LASTEXITCODE"

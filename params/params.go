@@ -60,6 +60,10 @@ type UserDataOptions struct {
 	DisableUpdatesOnBoot bool     `json:"disable_updates_on_boot"`
 	ExtraPackages        []string `json:"extra_packages"`
 	EnableBootDebug      bool     `json:"enable_boot_debug"`
+	// RunnerUsername is the username passed on to the runner install template.
+	RunnerUsername string `json:"runner_username"`
+	// RunnerGroup is the group name passed on to the runner install template.
+	RunnerGroup string `json:"runner_group"`
 }
 
 type BootstrapInstance struct {

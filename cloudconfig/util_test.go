@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cloudbase/garm-provider-common/defaults"
 	"github.com/cloudbase/garm-provider-common/params"
 	"github.com/stretchr/testify/require"
 )
@@ -62,9 +63,57 @@ func TestGetSpecs(t *testing.T) {
 		PreInstallScripts: map[string][]byte{
 			"test-script": []byte("test-script-content"),
 		},
+		RunnerUsername: defaults.DefaultUser,
+		RunnerGroup:    defaults.DefaultUser,
 	}
 
 	specs, err := GetSpecs(bootstrapParams)
+	require.NoError(t, err)
+	require.Equal(t, expectedSpecs, specs)
+}
+
+func TestGetSpecsWithExtraSpecsUser(t *testing.T) {
+	extraSpecsJson := `{
+		"runner_username": "from-specs",
+		"runner_group": "group-from-specs"
+	}`
+	expectedSpecs := CloudConfigSpec{
+		PreInstallScripts: map[string][]byte{},
+		ExtraContext:      map[string]string{},
+		RunnerUsername:    "from-specs",
+		RunnerGroup:       "group-from-specs",
+	}
+	specsParam := bootstrapParams
+	specsParam.ExtraSpecs = []byte(extraSpecsJson)
+	// When extra specs are set, the user data options should be ignored.
+	specsParam.UserDataOptions.RunnerUsername = "i-should-be-ignored"
+	specsParam.UserDataOptions.RunnerGroup = "i-should-be-ignored"
+
+	specs, err := GetSpecs(specsParam)
+	require.NoError(t, err)
+	require.Equal(t, expectedSpecs, specs)
+}
+
+func TestGetSpecsWithUserDataOptions(t *testing.T) {
+	differentUser := "different"
+	differentGroup := "differentGroup"
+	expectedSpecs := CloudConfigSpec{
+		RunnerInstallTemplate: []byte("test_template: {{ .RunnerName }} - {{ .ExtraContext.test_var1 }} - {{ .ExtraContext.test_var2 }}"),
+		ExtraContext: map[string]string{
+			"test_var1": "bogus-value1",
+			"test_var2": "bogus-value2",
+		},
+		PreInstallScripts: map[string][]byte{
+			"test-script": []byte("test-script-content"),
+		},
+		RunnerUsername: differentUser,
+		RunnerGroup:    differentGroup,
+	}
+
+	specParams := bootstrapParams
+	specParams.UserDataOptions.RunnerUsername = differentUser
+	specParams.UserDataOptions.RunnerGroup = differentGroup
+	specs, err := GetSpecs(specParams)
 	require.NoError(t, err)
 	require.Equal(t, expectedSpecs, specs)
 }
